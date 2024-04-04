@@ -1,56 +1,84 @@
-package robotPackage;
+package pkg;
 import robocode.*;
-//import java.awt.Color;
+import robocode.util.Utils;
+import java.awt.Color;
+import java.util.Random;
 
-// API help : https://robocode.sourceforge.io/docs/robocode/robocode/Robot.html
+public class BigBalls extends AdvancedRobot {
+    Random random = new Random();
+    final int safeDistanceToWall = 70;
+    final double maxEscapeAngle = Math.toRadians(45);
 
-/**
- * BigBalls - a robot by (your name here)
- */
-public class BigBalls extends AdvancedRobot
-{
-	/**
-	 * run: BigBalls's default behavior
-	 */
-	public void run() {
-		// Initialization of the robot should be put here
+    public void run() {
+        setColors(Color.blue, Color.black, Color.red);
+        setAdjustGunForRobotTurn(true);
+        setAdjustRadarForGunTurn(true);
 
-		// After trying out your robot, try uncommenting the import at the top,
-		// and the next line:
+        do {
+            oscillatoryOrbitMovement();
+            turnRadarRightRadians(Double.POSITIVE_INFINITY);
+        } while (true);
+    }
 
-		// setColors(Color.red,Color.blue,Color.green); // body,gun,radar
+    private void oscillatoryOrbitMovement() {
+        setAhead(150 * (random.nextBoolean() ? 1 : -1));
+        setTurnRight(90 * (random.nextBoolean() ? 1 : -1));
+        execute();
+    }
 
-		// Robot main loop
-		while(true) {
-			// Replace the next 4 lines with any behavior you would like
-			ahead(100);
-			turnGunRight(360);
-			back(100);
-			turnGunRight(360);
-		}
-	}
+    public void onScannedRobot(ScannedRobotEvent e) {
+        double radarTurn = 
+            Utils.normalRelativeAngle(getHeadingRadians() + e.getBearingRadians() - getRadarHeadingRadians());
+        setTurnRadarRightRadians(2.0 * radarTurn);
 
-	/**
-	 * onScannedRobot: What to do when you see another robot
-	 */
-	public void onScannedRobot(ScannedRobotEvent e) {
-		// Replace the next line with any behavior you would like
-		fire(1);
-	}
+        double bulletPower = calculateBulletPower(e.getDistance());
+        double bulletSpeed = 20 - 3 * bulletPower;
+        double futureTime = e.getDistance() / bulletSpeed;
+        double absoluteBearing = getHeadingRadians() + e.getBearingRadians();
+        double futureX = getX() + Math.sin(absoluteBearing) * e.getDistance() + 
+                         Math.sin(e.getHeadingRadians()) * e.getVelocity() * futureTime;
+        double futureY = getY() + Math.cos(absoluteBearing) * e.getDistance() + 
+                         Math.cos(e.getHeadingRadians()) * e.getVelocity() * futureTime;
+        double futureBearing = absoluteBearing(getX(), getY(), futureX, futureY);
 
-	/**
-	 * onHitByBullet: What to do when you're hit by a bullet
-	 */
-	public void onHitByBullet(HitByBulletEvent e) {
-		// Replace the next line with any behavior you would like
-		back(10);
-	}
-	
-	/**
-	 * onHitWall: What to do when you hit a wall
-	 */
-	public void onHitWall(HitWallEvent e) {
-		// Replace the next line with any behavior you would like
-		back(20);
-	}	
+        double gunTurnAmt = Utils.normalRelativeAngle(futureBearing - getGunHeadingRadians());
+        setTurnGunRightRadians(gunTurnAmt);
+        if (getGunHeat() == 0 && Math.abs(getGunTurnRemaining()) < 10) {
+            fire(bulletPower);
+        }
+    }
+
+    private double calculateBulletPower(double enemyDistance) {
+        double power;
+        if(getEnergy() > 50) {
+            power = Math.min(3.0, 400 / enemyDistance);
+        } else if(getEnergy() > 20 && getEnergy() <= 50) {
+            power = Math.min(2.5, 300 / enemyDistance);
+        } else {
+            power = 1.0;
+        }
+        return power;
+    }
+
+    @Override
+    public void onHitByBullet(HitByBulletEvent event) {
+        oscillatoryOrbitMovement();
+    }
+
+    @Override
+    public void onHitWall(HitWallEvent event) {
+        setBack(150);
+        setTurnRight(90 + (random.nextDouble() * 180));
+    }
+
+    private boolean tooCloseToWall() {
+        return (getX() <= safeDistanceToWall || getX() >= getBattleFieldWidth() - safeDistanceToWall ||
+                getY() <= safeDistanceToWall || getY() >= getBattleFieldHeight() - safeDistanceToWall);
+    }
+
+    public double absoluteBearing(double x1, double y1, double x2, double y2) {
+        double deltaX = x2 - x1;
+        double deltaY = y2 - y1;
+        return Math.atan2(deltaX, deltaY);
+    }
 }
